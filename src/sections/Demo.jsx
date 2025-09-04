@@ -108,46 +108,94 @@ export default function Demo({
   const [modalTone, setModalTone] = useState(undefined);
   const [modalAnim, setModalAnim] = useState(null);
 
-  // Explicación con negritas/cursivas (sin revelar la respuesta literal)
+  // ======= Validación de reactivos y nudge visual =======
+  const REQUIRED = ["A", "B", "D"];
+  const [nudge, setNudge] = useState({ A: false, B: false, D: false });
+  const NudgeCss = useMemo(
+    () => (
+      <style>{`
+        @keyframes hc-nudge {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(215,38,61,.55); }
+          70%{ transform: scale(1.04); box-shadow: 0 0 0 10px rgba(215,38,61,0); }
+          100%{ transform: scale(1); box-shadow: 0 0 0 0 rgba(215,38,61,0); }
+        }
+      `}</style>
+    ),
+    []
+  );
+  function getMissingReagents(map) {
+    return REQUIRED.filter((k) => !map[k]);
+  }
+  function showMissingModal(missingKeys) {
+    openModal({
+      title: "Faltan reactivos",
+      tone: "error",
+      anim: errorAnim,
+      body: (
+        <div className="space-y-2 text-sm">
+          <p>Antes de comprobar, coloca los siguientes reactivos en sus pozos:</p>
+          <ul className="list-disc pl-5">
+            {missingKeys.includes("A") && <li><strong>anti-A</strong></li>}
+            {missingKeys.includes("B") && <li><strong>anti-B</strong></li>}
+            {missingKeys.includes("D") && <li><strong>anti-D (Rh)</strong></li>}
+          </ul>
+          <p className="text-white/70">Tip: usa los botones “Añadir/Quitar” debajo de cada pozo.</p>
+        </div>
+      ),
+    });
+  }
+  // =====================================================
+
+  // --- EXPLICACIÓN dinámica: frase exacta + aterrizaje a la muestra ---
   function explanationFragment() {
-    const items = [];
-    items.push(
-      <p key="p1" className="text-white/80 text-sm">
-        <strong>Paso 1.</strong> Observa la presencia de <em>aglutinación</em> en cada pozo:
-        {" "}
-        <strong>anti-A</strong> {sample.A ? <><em>(+)</em></> : <><em>(−)</em></>} ·{" "}
-        <strong>anti-B</strong> {sample.B ? <><em>(+)</em></> : <><em>(−)</em></>} ·{" "}
-        <strong>anti-D (Rh)</strong> {sample.Rh ? <><em>(+)</em></> : <><em>(−)</em></>}
-        .
-      </p>
-    );
-    if (enableCombinedAB) {
-      items.push(
-        <p key="p2" className="text-white/80 text-sm">
-          <strong>anti-A,B (combinado).</strong> Se usa como <em>cribado</em> de antígenos <strong>A</strong> o <strong>B</strong>:
-          será {sample.A || sample.B ? <><em>positivo</em></> : <><em>negativo</em></>} si existe al menos uno de ellos.
+    const mark = (applied, positive) =>
+      applied ? (positive ? <em>(+)</em> : <em>(−)</em>) : <em>(no aplicado)</em>;
+
+    const patA = mark(added.A, sample.A);
+    const patB = mark(added.B, sample.B);
+    const patD = mark(added.D, sample.Rh);
+    const patAB = enableCombinedAB ? mark(added.AB, sample.A || sample.B) : null;
+
+    const antigensText =
+      sample.A && sample.B ? "antígeno A y B" :
+      sample.A && !sample.B ? "antígeno A" :
+      !sample.A && sample.B ? "antígeno B" :
+      "ningún antígeno A/B (patrón compatible con O)";
+
+    const rhText = sample.Rh ? "Rh positivo" : "Rh negativo";
+
+    return (
+      <div className="space-y-2">
+        <p className="text-white/80 text-sm">
+          <strong>Paso 1.</strong> Patrón observado en los pozos:
         </p>
-      );
-    }
-    items.push(
-      <p key="p3" className="text-white/80 text-sm">
-        <strong>Regla.</strong> <em>Si hay aglutinación con anti-X, el antígeno X está presente en los eritrocitos; si no hay,
-        el antígeno X está ausente.</em>
-      </p>
+        <ul className="list-disc pl-5 text-sm text-white/80">
+          <li><strong>anti-A</strong> {patA} — {added.A ? (sample.A ? "hubo aglutinación" : "no hubo aglutinación") : "sin aplicar"}</li>
+          <li><strong>anti-B</strong> {patB} — {added.B ? (sample.B ? "hubo aglutinación" : "no hubo aglutinación") : "sin aplicar"}</li>
+          <li><strong>anti-D (Rh)</strong> {patD} — {added.D ? (sample.Rh ? "hubo aglutinación" : "no hubo aglutinación") : "sin aplicar"}</li>
+          {enableCombinedAB && (
+            <li><strong>anti-A,B (combinado)</strong> {patAB} — cribado de antígenos A o B</li>
+          )}
+        </ul>
+
+        {/* Frase EXACTA pedida por el cliente */}
+        <p className="text-white/80 text-sm">
+          <strong>Retroalimentación:</strong>{" "}
+          <em>Si existe aglutinación es debido a que el antigeno A o B (según sea el caso).</em>
+        </p>
+
+        {/* Aterrizaje específico a ESTA muestra */}
+        <p className="text-white/80 text-sm">
+          <strong>En esta muestra:</strong> se evidencia {antigensText}; el factor es <strong>{rhText}</strong>.
+        </p>
+
+        <ul className="mt-1 list-disc pl-5 text-xs text-white/70">
+          <li><strong>anti-A (+)</strong> ⇒ antígeno <strong>A</strong> presente</li>
+          <li><strong>anti-B (+)</strong> ⇒ antígeno <strong>B</strong> presente</li>
+          <li><strong>anti-D (+)</strong> ⇒ <strong>Rh positivo</strong></li>
+        </ul>
+      </div>
     );
-    items.push(
-      <ul key="ul" className="mt-1 list-disc pl-5 text-xs text-white/70">
-        <li><strong>anti-A (+)</strong> ⇒ antígeno <strong>A</strong> presente</li>
-        <li><strong>anti-B (+)</strong> ⇒ antígeno <strong>B</strong> presente</li>
-        <li><strong>anti-D (+)</strong> ⇒ <strong>Rh positivo</strong></li>
-      </ul>
-    );
-    items.push(
-      <p key="p4" className="text-white/80 text-sm">
-        <strong>Conclusión.</strong> Con ese patrón se <em>infiere</em> el grupo ABO y el Rh sin necesidad de mostrar la respuesta literal.
-      </p>
-    );
-    return <div className="space-y-2">{items}</div>;
   }
 
   function openModal({ title, body, tone, anim }) {
@@ -161,10 +209,20 @@ export default function Demo({
   function handleCheck(autoTimeout = false) {
     if (mode === "evaluacion" && attemptCount >= MAX_ATTEMPTS) return;
 
+    // Validación: deben estar anti-A, anti-B y anti-D
+    const missing = getMissingReagents(added);
+    if (missing.length > 0) {
+      setNudge({ A: missing.includes("A"), B: missing.includes("B"), D: missing.includes("D") });
+      setTimeout(() => setNudge({ A: false, B: false, D: false }), 1200);
+      showMissingModal(missing);
+      return;
+    }
+
     const isCorrect = !autoTimeout && correct;
     setChecked(true);
 
-    const entry = {
+    // Registro (si lo usas)
+    onAttemptRecorded?.({
       ts: Date.now(),
       mode,
       guessABO,
@@ -173,17 +231,32 @@ export default function Demo({
       added: { ...added },
       timeUsedSec: EVAL_SECONDS - (mode === "evaluacion" ? timeLeft : EVAL_SECONDS),
       score: computeScore(isCorrect, added, mode === "evaluacion" ? timeLeft : EVAL_SECONDS),
-    };
-
-    onAttemptRecorded?.(entry);
+    });
     if (mode === "evaluacion") setAttemptCount((c) => c + 1);
 
-    // Mostrar explicación formateada (negritas/cursivas) sin revelar la respuesta
+    // Respuesta correcta (siempre)
+    const realABO = sampleToABO(sample);
+    const realRhLabel = sample.Rh ? "Rh +" : "Rh −";
+    const userRhLabel = guessRh ? "Rh +" : "Rh −";
+
     const coreBody = (
-      <div className="space-y-2">
+      <div className="space-y-3">
         <p className={isCorrect ? "text-emerald-300 font-semibold" : "text-rose-300 font-semibold"}>
           {isCorrect ? "¡Correcto!" : autoTimeout ? "Tiempo agotado" : "Incorrecto"}
         </p>
+
+        <div className="rounded-lg border border-white/15 bg-white/5 p-3 text-sm">
+          <p className="font-semibold">Respuesta correcta:</p>
+          <p>
+            <strong>Grupo ABO:</strong> {realABO} — <strong>Factor:</strong> {realRhLabel}
+          </p>
+          {!isCorrect && (
+            <p className="mt-1 text-white/70">
+              Tu respuesta: <strong>{guessABO}</strong>, <strong>{userRhLabel}</strong>
+            </p>
+          )}
+        </div>
+
         {explanationFragment()}
       </div>
     );
@@ -242,6 +315,8 @@ export default function Demo({
 
   return (
     <section id="simulacion" className="mx-auto max-w-7xl px-5 py-16">
+      {NudgeCss}
+
       <SectionTitle
         kicker="Simulación"
         title={uiVariant === "free" ? "Práctica libre de tipificación" : "Práctica de tipificación"}
@@ -275,7 +350,7 @@ export default function Demo({
             </div>
           </Card>
           <Card>
-            <p className="text-sm text-white/80">El modal explica el razonamiento sin mostrar la respuesta literal.</p>
+            <p className="text-sm text-white/80">El modal explica el razonamiento y muestra la respuesta correcta.</p>
           </Card>
         </div>
       )}
@@ -285,13 +360,44 @@ export default function Demo({
         <Card className="order-2 lg:order-1">
           <h3 className="text-lg font-semibold">Pozos de reacción</h3>
           <p className="mt-1 text-sm text-white/70">
-            Añade el reactivo y observa si aparece aglutinación. (La <em>gota</em> que cae ahora es más oscura y gruesa.)
+            Añade el reactivo y observa si aparece aglutinación.
           </p>
 
           <div className={`mt-6 grid ${enableCombinedAB ? "grid-cols-4" : "grid-cols-3"} gap-6`}>
-            <ReactionWell label="anti-A" added={added.A} agglutinates={results.antiA} seed={wellSeed} />
-            <ReactionWell label="anti-B" added={added.B} agglutinates={results.antiB} seed={wellSeed} />
-            <ReactionWell label="anti-D (Rh)" added={added.D} agglutinates={results.antiD} seed={wellSeed} />
+            {/* anti-A */}
+            <div className="relative">
+              {!added.A && nudge.A && (
+                <span
+                  className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-[#D7263D]"
+                  style={{ animation: "hc-nudge 1.1s ease-out 2" }}
+                />
+              )}
+              <ReactionWell label="anti-A" added={added.A} agglutinates={results.antiA} seed={wellSeed} />
+            </div>
+
+            {/* anti-B */}
+            <div className="relative">
+              {!added.B && nudge.B && (
+                <span
+                  className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-[#D7263D]"
+                  style={{ animation: "hc-nudge 1.1s ease-out 2" }}
+                />
+              )}
+              <ReactionWell label="anti-B" added={added.B} agglutinates={results.antiB} seed={wellSeed} />
+            </div>
+
+            {/* anti-D */}
+            <div className="relative">
+              {!added.D && nudge.D && (
+                <span
+                  className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-[#D7263D]"
+                  style={{ animation: "hc-nudge 1.1s ease-out 2" }}
+                />
+              )}
+              <ReactionWell label="anti-D (Rh)" added={added.D} agglutinates={results.antiD} seed={wellSeed} />
+            </div>
+
+            {/* combinado opcional */}
             {enableCombinedAB && (
               <ReactionWell
                 label="anti-A,B (opcional)"
@@ -454,8 +560,14 @@ export default function Demo({
         lottieAnim={modalAnim}
         onClose={() => {
           setModalOpen(false);
-          // tras cerrar manualmente, reiniciamos para nueva práctica
-          resetAll(true);
+          // tras cerrar manualmente, si fue resultado (success/error), reiniciamos para nueva práctica
+          if (modalTone === "success" || modalTone === "error") {
+            setAdded({ A: false, B: false, D: false, AB: false });
+            setChecked(null);
+            setSample(makeRandomSample());
+            setWellSeed((s) => s + 1);
+            if (mode === "evaluacion") setTimeLeft(EVAL_SECONDS);
+          }
         }}
       >
         {modalBody}
